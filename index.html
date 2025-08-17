@@ -446,12 +446,35 @@ iframe.onload = () => {
         });
 
         // Handle direct API calls via URL parameters
-        window.addEventListener('load', () => {
+        window.addEventListener('load', async () => {
             const params = new URLSearchParams(window.location.search);
-            if (params.has('api')) {
-                // Hide the UI for API mode
-                document.querySelector('.container').style.display = 'none';
-                document.body.innerHTML = '<div style="color: white; text-align: center; padding: 50px;">Text Overlay API Ready<br>Send postMessage with imageUrl and text</div>' + document.body.innerHTML;
+
+              // If "imageUrl" and "text" are passed, process automatically
+              if (params.has('imageUrl') && params.has('text')) {
+                  const imageUrl = params.get('imageUrl');
+                  const text = params.get('text');
+                  const fontSize = parseInt(params.get('fontSize') || "48");
+                  const position = params.get('position') || "bottom";
+                  const color = params.get('color') || "white";
+
+                  try {
+                      const blob = await addTextOverlay(imageUrl, text, {
+                          fontSize,
+                          position,
+                          color
+                    });
+
+                    // Return base64 in the body (so n8n can pick it up)
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        // Replace page content with just the base64 so HTTP Request node gets it
+                        document.body.innerText = reader.result;
+                    };
+                    reader.readAsDataURL(blob);
+
+                } catch (err) {
+                    document.body.innerText = "Error: " + err.message;
+                }
             }
         });
     </script>
