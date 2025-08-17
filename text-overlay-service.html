@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Overlay Service</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        
+        .container {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #fff;
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            background: #1a1a1a;
+            color: #fff;
+            font-size: 14px;
+        }
+        
+        textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        .result {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        #resultImage {
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        .download-link {
+            display: inline-block;
+            margin-top: 10px;
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        
+        .api-info {
+            background: #333;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        
+        canvas {
+            display: none;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Text Overlay Service</h1>
+        
+        <div class="form-group">
+            <label for="imageUrl">Image URL:</label>
+            <input type="url" id="imageUrl" placeholder="https://example.com/image.jpg" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="overlayText">Text to Overlay:</label>
+            <textarea id="overlayText" placeholder="Enter your text here..." required></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="fontSize">Font Size:</label>
+            <select id="fontSize">
+                <option value="32">Small (32px)</option>
+                <option value="48" selected>Medium (48px)</option>
+                <option value="64">Large (64px)</option>
+                <option value="80">Extra Large (80px)</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="textPosition">Text Position:</label>
+            <select id="textPosition">
+                <option value="bottom">Bottom</option>
+                <option value="top">Top</option>
+                <option value="center">Center</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="textColor">Text Color:</label>
+            <select id="textColor">
+                <option value="white" selected>White</option>
+                <option value="black">Black</option>
+                <option value="red">Red</option>
+                <option value="yellow">Yellow</option>
+                <option value="blue">Blue</option>
+            </select>
+        </div>
+        
+        <button onclick="processImage()" id="processBtn">Add Text Overlay</button>
+        
+        <div class="status" id="status"></div>
+        
+        <div class="result" id="result" style="display: none;">
+            <img id="resultImage" alt="Processed image">
+            <br>
+            <a id="downloadLink" class="download-link" download="image-with-text.jpg">Download Image</a>
+        </div>
+        
+        <div class="api-info">
+<strong>API Usage for N8N:</strong>
+
+POST to this page with JSON:
+{
+  "imageUrl": "https://your-image-url.jpg",
+  "text": "Your overlay text",
+  "fontSize": 48,
+  "position": "bottom",
+  "color": "white"
+}
+
+Or use as iframe and postMessage API:
+const iframe = document.createElement('iframe');
+iframe.src = 'path/to/this/page.html';
+iframe.onload = () => {
+  iframe.contentWindow.postMessage({
+    imageUrl: 'https://your-image.jpg',
+    text: 'Your text',
+    fontSize: 48,
+    position: 'bottom',
+    color: 'white'
+  }, '*');
+};
+        </div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        function showStatus(message, type = 'success') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+            
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 5000);
+        }
+
+        function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+            const words = text.split(' ');
+            let line = '';
+            const lines = [];
+
+            for (let n = 0; n < words.length; n++) {
+                const testLine = line + words[n] + ' ';
+                const metrics = ctx.measureText(testLine);
+                const testWidth = metrics.width;
+                
+                if (testWidth > maxWidth && n > 0) {
+                    lines.push(line.trim());
+                    line = words[n] + ' ';
+                } else {
+                    line = testLine;
+                }
+            }
+            lines.push(line.trim());
+            
+            // Draw each line
+            const startY = y - ((lines.length - 1) * lineHeight / 2);
+            lines.forEach((line, index) => {
+                const lineY = startY + (index * lineHeight);
+                
+                // Draw outline
+                ctx.strokeText(line, x, lineY);
+                // Draw fill
+                ctx.fillText(line, x, lineY);
+            });
+        }
+
+        async function addTextOverlay(imageUrl, text, options = {}) {
+            return new Promise((resolve, reject) => {
+                const canvas = document.getElementById('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                // Set defaults
+                const fontSize = options.fontSize || 48;
+                const position = options.position || 'bottom';
+                const color = options.color || 'white';
+                
+                img.crossOrigin = 'anonymous';
+                img.onload = function() {
+                    try {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        
+                        // Draw the original image
+                        ctx.drawImage(img, 0, 0);
+                        
+                        // Configure text style for garage gym aesthetic
+                        ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+                        ctx.fillStyle = color;
+                        ctx.strokeStyle = color === 'white' ? '#000' : '#fff';
+                        ctx.lineWidth = Math.max(2, fontSize / 24);
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        
+                        // Add shadow for more dramatic effect
+                        ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+                        ctx.shadowBlur = 10;
+                        ctx.shadowOffsetX = 3;
+                        ctx.shadowOffsetY = 3;
+                        
+                        // Calculate position
+                        const x = canvas.width / 2;
+                        let y;
+                        
+                        switch(position) {
+                            case 'top':
+                                y = fontSize + 50;
+                                break;
+                            case 'center':
+                                y = canvas.height / 2;
+                                break;
+                            case 'bottom':
+                            default:
+                                y = canvas.height - fontSize - 50;
+                                break;
+                        }
+                        
+                        // Add semi-transparent background behind text
+                        const maxWidth = canvas.width * 0.9;
+                        const padding = 20;
+                        const lineHeight = fontSize * 1.2;
+                        
+                        // Measure text to create background
+                        const words = text.split(' ');
+                        let line = '';
+                        const lines = [];
+                        
+                        for (let n = 0; n < words.length; n++) {
+                            const testLine = line + words[n] + ' ';
+                            const metrics = ctx.measureText(testLine);
+                            if (metrics.width > maxWidth && n > 0) {
+                                lines.push(line.trim());
+                                line = words[n] + ' ';
+                            } else {
+                                line = testLine;
+                            }
+                        }
+                        lines.push(line.trim());
+                        
+                        // Draw background rectangle
+                        const bgHeight = lines.length * lineHeight + padding * 2;
+                        const bgWidth = Math.min(maxWidth + padding * 2, canvas.width - 40);
+                        const bgY = y - bgHeight / 2;
+                        const bgX = x - bgWidth / 2;
+                        
+                        ctx.save();
+                        ctx.shadowColor = 'transparent';
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                        ctx.fillRect(bgX, bgY, bgWidth, bgHeight);
+                        ctx.restore();
+                        
+                        // Draw text with wrapping
+                        wrapText(ctx, text, x, y, maxWidth, lineHeight);
+                        
+                        // Convert to blob
+                        canvas.toBlob((blob) => {
+                            if (blob) {
+                                resolve(blob);
+                            } else {
+                                reject(new Error('Failed to create image blob'));
+                            }
+                        }, 'image/jpeg', 0.9);
+                        
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                
+                img.onerror = () => {
+                    reject(new Error('Failed to load image. Check URL and CORS settings.'));
+                };
+                
+                img.src = imageUrl;
+            });
+        }
+
+        async function processImage() {
+            const imageUrl = document.getElementById('imageUrl').value;
+            const text = document.getElementById('overlayText').value;
+            const fontSize = parseInt(document.getElementById('fontSize').value);
+            const position = document.getElementById('textPosition').value;
+            const color = document.getElementById('textColor').value;
+            
+            if (!imageUrl || !text) {
+                showStatus('Please enter both image URL and text', 'error');
+                return;
+            }
+            
+            const processBtn = document.getElementById('processBtn');
+            processBtn.disabled = true;
+            processBtn.textContent = 'Processing...';
+            
+            try {
+                showStatus('Processing image...', 'success');
+                
+                const blob = await addTextOverlay(imageUrl, text, {
+                    fontSize,
+                    position,
+                    color
+                });
+                
+                // Display result
+                const resultDiv = document.getElementById('result');
+                const resultImage = document.getElementById('resultImage');
+                const downloadLink = document.getElementById('downloadLink');
+                
+                const imageUrl_result = URL.createObjectURL(blob);
+                resultImage.src = imageUrl_result;
+                downloadLink.href = imageUrl_result;
+                downloadLink.download = `image-with-text-${Date.now()}.jpg`;
+                
+                resultDiv.style.display = 'block';
+                showStatus('Image processed successfully!', 'success');
+                
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+                console.error('Processing error:', error);
+            } finally {
+                processBtn.disabled = false;
+                processBtn.textContent = 'Add Text Overlay';
+            }
+        }
+
+        // API for N8N integration
+        window.addEventListener('message', async (event) => {
+            try {
+                const { imageUrl, text, fontSize = 48, position = 'bottom', color = 'white' } = event.data;
+                
+                if (!imageUrl || !text) {
+                    throw new Error('imageUrl and text are required');
+                }
+                
+                const blob = await addTextOverlay(imageUrl, text, {
+                    fontSize: parseInt(fontSize),
+                    position,
+                    color
+                });
+                
+                const reader = new FileReader();
+                reader.onload = () => {
+                    event.source.postMessage({
+                        success: true,
+                        imageData: reader.result,
+                        mimeType: 'image/jpeg'
+                    }, '*');
+                };
+                reader.readAsDataURL(blob);
+                
+            } catch (error) {
+                event.source.postMessage({
+                    success: false,
+                    error: error.message
+                }, '*');
+            }
+        });
+
+        // Handle direct API calls via URL parameters
+        window.addEventListener('load', () => {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('api')) {
+                // Hide the UI for API mode
+                document.querySelector('.container').style.display = 'none';
+                document.body.innerHTML = '<div style="color: white; text-align: center; padding: 50px;">Text Overlay API Ready<br>Send postMessage with imageUrl and text</div>' + document.body.innerHTML;
+            }
+        });
+    </script>
+</body>
+</html>
